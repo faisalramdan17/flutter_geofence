@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:developer';
 import 'dart:io';
+import 'package:example/screens/location_picker_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_geofence_manager/flutter_geofence_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:place_picker_google/place_picker_google.dart';
+import 'models/region_model.dart';
+import 'services/region_storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +20,6 @@ void main() async {
       AndroidInitializationSettings('@mipmap/ic_launcher');
 
   const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings();
-  ;
 
   const InitializationSettings initializationSettings = InitializationSettings(
     android: initializationSettingsAndroid,
@@ -69,12 +72,333 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
   bool _isInitialized = false;
   bool _isMonitoring = false;
   List<GeoFenceEvent> events = [];
+  List<RegionModel> regions = [];
+  bool _isLoadingRegions = true;
   StreamSubscription<GeoFenceEvent>? _eventSubscription;
 
   @override
   void initState() {
     super.initState();
     _initializeGeoFencing();
+    _loadSavedRegions();
+  }
+
+  Future<void> _loadSavedRegions() async {
+    setState(() {
+      _isLoadingRegions = true;
+    });
+
+    try {
+      final savedRegions = await RegionStorageService.loadRegions();
+      setState(() {
+        regions = savedRegions;
+        _isLoadingRegions = false;
+      });
+    } catch (e) {
+      debugPrint('Failed to load saved regions: $e');
+      setState(() {
+        _isLoadingRegions = false;
+      });
+      _showSnackBar('Failed to load saved regions');
+    }
+  }
+
+  Future<void> _saveRegions() async {
+    try {
+      await RegionStorageService.saveRegions(regions);
+    } catch (e) {
+      debugPrint('Failed to save regions: $e');
+      _showSnackBar('Failed to save regions');
+    }
+  }
+
+  Future<void> _addRegion(RegionModel region) async {
+    setState(() {
+      regions.add(region);
+    });
+    await _saveRegions();
+  }
+
+  Future<void> _updateRegion(RegionModel region, int index) async {
+    setState(() {
+      regions[index] = region;
+    });
+    await _saveRegions();
+  }
+
+  Future<void> _deleteRegion(int index) async {
+    setState(() {
+      regions.removeAt(index);
+    });
+    await _saveRegions();
+  }
+
+  Future<LocationResult?> _showLocationPickerDialog() async {
+    return Navigator.push<LocationResult?>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const LocationPickerScreen(),
+      ),
+    );
+  }
+
+  Future<void> _showAddRegionDialog() async {
+    final TextEditingController idController = TextEditingController();
+    final TextEditingController latitudeController = TextEditingController();
+    final TextEditingController longitudeController = TextEditingController();
+    final TextEditingController radiusController = TextEditingController(text: '100.0');
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Add Region'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                ElevatedButton(
+                  onPressed: () async {
+                    final pickedData = await _showLocationPickerDialog();
+                    if (pickedData != null) {
+                      setState(() {
+                        latitudeController.text = pickedData.latLng?.latitude.toString() ?? '';
+                        longitudeController.text = pickedData.latLng?.longitude.toString() ?? '';
+                      });
+                    }
+                  },
+                  child: const Text('Pick Location'),
+                ),
+                Divider(),
+                TextField(
+                  controller: idController,
+                  decoration: const InputDecoration(
+                    labelText: 'Region ID (example: home)',
+                    hintText: 'Enter a unique identifier',
+                  ),
+                ),
+                TextField(
+                  controller: latitudeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Latitude',
+                    hintText: 'Enter latitude (-90 to 90)',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                TextField(
+                  controller: longitudeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Longitude',
+                    hintText: 'Enter longitude (-180 to 180)',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                TextField(
+                  controller: radiusController,
+                  decoration: const InputDecoration(
+                    labelText: 'Radius (meters)',
+                    hintText: 'Enter radius in meters',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: const Text('Save'),
+              onPressed: () {
+                // Validate inputs
+                if (idController.text.isEmpty ||
+                    latitudeController.text.isEmpty ||
+                    longitudeController.text.isEmpty ||
+                    radiusController.text.isEmpty) {
+                  _showSnackBar('All fields are required');
+                  return;
+                }
+
+                try {
+                  final double latitude = double.parse(latitudeController.text);
+                  final double longitude = double.parse(longitudeController.text);
+                  final double radius = double.parse(radiusController.text);
+
+                  // Check if region ID is already used
+                  if (regions.any((r) => r.id == idController.text)) {
+                    _showSnackBar('Region ID already exists. Please use a unique ID.');
+                    return;
+                  }
+
+                  // Create new region
+                  final RegionModel newRegion = RegionModel(
+                    id: idController.text,
+                    latitude: latitude,
+                    longitude: longitude,
+                    radius: radius,
+                  );
+
+                  // Add to list and save
+                  _addRegion(newRegion);
+                  Navigator.of(context).pop();
+                } catch (e) {
+                  _showSnackBar('Invalid input. Please enter valid numbers.');
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    // idController.dispose();
+    // latitudeController.dispose();
+    // longitudeController.dispose();
+    // radiusController.dispose();
+  }
+
+  Future<void> _showEditRegionDialog(RegionModel region, int index) async {
+    final TextEditingController idController = TextEditingController(text: region.id);
+    final TextEditingController latitudeController = TextEditingController(text: region.latitude.toString());
+    final TextEditingController longitudeController =
+        TextEditingController(text: region.longitude.toString());
+    final TextEditingController radiusController = TextEditingController(text: region.radius.toString());
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Region'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                ElevatedButton(
+                  onPressed: () async {
+                    final pickedData = await _showLocationPickerDialog();
+                    if (pickedData != null) {
+                      setState(() {
+                        latitudeController.text = pickedData.latLng?.latitude.toString() ?? '';
+                        longitudeController.text = pickedData.latLng?.longitude.toString() ?? '';
+                      });
+                    }
+                  },
+                  child: const Text('Pick Location'),
+                ),
+                Divider(),
+                TextField(
+                  controller: idController,
+                  decoration: const InputDecoration(
+                    labelText: 'Region ID (example: home)',
+                    hintText: 'Enter a unique identifier',
+                  ),
+                ),
+                TextField(
+                  controller: latitudeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Latitude',
+                    hintText: 'Enter latitude (-90 to 90)',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                TextField(
+                  controller: longitudeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Longitude',
+                    hintText: 'Enter longitude (-180 to 180)',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                TextField(
+                  controller: radiusController,
+                  decoration: const InputDecoration(
+                    labelText: 'Radius (meters)',
+                    hintText: 'Enter radius in meters',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: const Text('Update'),
+              onPressed: () {
+                // Validate inputs
+                if (idController.text.isEmpty ||
+                    latitudeController.text.isEmpty ||
+                    longitudeController.text.isEmpty ||
+                    radiusController.text.isEmpty) {
+                  _showSnackBar('All fields are required');
+                  return;
+                }
+
+                try {
+                  final double latitude = double.parse(latitudeController.text);
+                  final double longitude = double.parse(longitudeController.text);
+                  final double radius = double.parse(radiusController.text);
+
+                  // Check if region ID is already used (by any other region)
+                  if (idController.text != region.id && regions.any((r) => r.id == idController.text)) {
+                    _showSnackBar('Region ID already exists. Please use a unique ID.');
+                    return;
+                  }
+
+                  // Create updated region
+                  final RegionModel updatedRegion = RegionModel(
+                    id: idController.text,
+                    latitude: latitude,
+                    longitude: longitude,
+                    radius: radius,
+                  );
+
+                  // Update list and save
+                  _updateRegion(updatedRegion, index);
+                  Navigator.of(context).pop();
+                } catch (e) {
+                  _showSnackBar('Invalid input. Please enter valid numbers.');
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showDeleteRegionDialog(int index) async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete Region'),
+          content: Text('Are you sure you want to delete the region "${regions[index].id}"?'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+              onPressed: () {
+                _deleteRegion(index);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -105,7 +429,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
         _isInitialized = true;
       });
       _listenToEvents();
-      await _startMonitoring();
+      // await _startMonitoring();
     } catch (e) {
       debugPrint('Failed to initialize geofencing: $e');
       _showSnackBar('Failed to initialize geofencing: $e');
@@ -116,14 +440,12 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
     try {
       if (Platform.isAndroid) {
         // For Android 13+, request notification permission
-        if (await widget.flutterLocalNotificationsPlugin
-                .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>() !=
-            null) {
-          final AndroidFlutterLocalNotificationsPlugin? androidImplementation = widget
-              .flutterLocalNotificationsPlugin
-              .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        final AndroidFlutterLocalNotificationsPlugin? androidImplementation = widget
+            .flutterLocalNotificationsPlugin
+            .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
-          final bool? granted = await androidImplementation?.requestNotificationsPermission();
+        if (androidImplementation != null) {
+          final bool? granted = await androidImplementation.requestNotificationsPermission();
           debugPrint('Android notification permission granted: $granted');
         }
       } else if (Platform.isIOS) {
@@ -149,10 +471,10 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
       bool allGranted = statuses.values.every((status) => status.isGranted);
 
       if (allGranted) {
-        debugPrint('All location permissions granted');
+        log('All location permissions granted');
         return true;
       } else {
-        debugPrint('Some permissions denied: $statuses');
+        log('Some permissions denied: $statuses');
 
         // Show dialog explaining why permissions are needed
         bool shouldOpenSettings = await _showPermissionDialog();
@@ -162,7 +484,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
         return false;
       }
     } catch (e) {
-      debugPrint('Error requesting permissions: $e');
+      log('Error requesting permissions: $e');
       return false;
     }
   }
@@ -216,33 +538,47 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
       _showSnackBar('Please wait for initialization to complete');
       return;
     }
+    if (regions.isEmpty) {
+      _showSnackBar('Please add at least one region to monitor');
+      return;
+    }
     try {
-      final regions = [
-        GeoFenceRegion(
-          id: 'home',
-          latitude: -6.174879, // Asya Daily
-          longitude: 106.7090942,
-          radius: 100.0, // 100 meters
-        ),
-        GeoFenceRegion(
-          id: 'swiming_pool',
-          latitude: -6.175065, // San Francisco coordinates as example
-          longitude: 106.710677,
-          radius: 100.0, // 100 meters
-        ),
-        GeoFenceRegion(
-          id: 'office',
-          latitude: 37.7849,
-          longitude: -122.4094,
-          radius: 200.0, // 200 meters
-        ),
-      ];
+      // Convert RegionModel to GeoFenceRegion
+      final geoFenceRegions = regions
+          .map((region) => GeoFenceRegion(
+                id: region.id,
+                latitude: region.latitude,
+                longitude: region.longitude,
+                radius: region.radius,
+              ))
+          .toList();
 
-      bool status = await _geoFencing.registerGeoFences(regions);
+      // final geoFenceRegions = [
+      //   GeoFenceRegion(
+      //     id: 'home',
+      //     latitude: -6.174879, // Asya Daily
+      //     longitude: 106.7090942,
+      //     radius: 100.0, // 100 meters
+      //   ),
+      //   GeoFenceRegion(
+      //     id: 'swiming_pool',
+      //     latitude: -6.175065, // San Francisco coordinates as example
+      //     longitude: 106.710677,
+      //     radius: 100.0, // 100 meters
+      //   ),
+      //   GeoFenceRegion(
+      //     id: 'office',
+      //     latitude: 37.7849,
+      //     longitude: -122.4094,
+      //     radius: 200.0, // 200 meters
+      //   ),
+      // ];
+
+      bool status = await _geoFencing.registerGeoFences(geoFenceRegions);
       setState(() {
         _isMonitoring = status;
       });
-      _showSnackBar('Started monitoring ${regions.length} geofences');
+      _showSnackBar('Started monitoring ${geoFenceRegions.length} geofences');
     } catch (e) {
       _showSnackBar('Failed to start monitoring: $e');
     }
@@ -251,8 +587,9 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
   Future<void> _stopMonitoring() async {
     try {
       // Remove all geofences
-      await _geoFencing.removeGeoFence('home');
-      await _geoFencing.removeGeoFence('office');
+      for (var region in regions) {
+        await _geoFencing.removeGeoFence(region.id);
+      }
 
       setState(() {
         _isMonitoring = false;
@@ -348,7 +685,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Flutter GeoFencing Example'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -392,6 +729,99 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
             ),
             const SizedBox(height: 16),
 
+            // Regions Card
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Regions',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        if (!_isMonitoring)
+                          IconButton(
+                            icon: const Icon(Icons.add),
+                            tooltip: 'Add Region',
+                            onPressed: _showAddRegionDialog,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (_isLoadingRegions)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16.0),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 8),
+                              Text('Loading regions...'),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (regions.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16.0),
+                        child: Center(
+                          child: Text(
+                            'No regions added yet. Add a region to start monitoring.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      )
+                    else
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: regions.length,
+                        itemBuilder: (context, index) {
+                          final region = regions[index];
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8.0),
+                            color: Colors.blue.shade100,
+                            child: ListTile(
+                              title: Text(region.id),
+                              subtitle: Text(
+                                'Lat: ${region.latitude.toStringAsFixed(4)},\n'
+                                'Lng: ${region.longitude.toStringAsFixed(4)}\n'
+                                'Radius: ${region.radius.toStringAsFixed(1)}m',
+                              ),
+                              isThreeLine: true,
+                              leading: const Icon(Icons.location_on_outlined),
+                              trailing: !_isMonitoring
+                                  ? Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        InkWell(
+                                          child: const Icon(Icons.edit),
+                                          onTap: () => _showEditRegionDialog(region, index),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        InkWell(
+                                          child: const Icon(Icons.delete, color: Colors.red),
+                                          onTap: () => _showDeleteRegionDialog(index),
+                                        ),
+                                      ],
+                                    )
+                                  : null,
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Control Buttons
             Row(
               children: [
@@ -417,21 +847,24 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
             const SizedBox(height: 16),
 
             // Test Notification Button
-            ElevatedButton.icon(
-              onPressed: () => _showTestNotification(),
-              icon: const Icon(Icons.notifications),
-              label: const Text('Test Notification'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 16),
+            // ElevatedButton.icon(
+            //   onPressed: () => _showTestNotification(),
+            //   icon: const Icon(Icons.notifications),
+            //   label: const Text('Test Notification'),
+            //   style: ElevatedButton.styleFrom(
+            //     backgroundColor: Colors.orange,
+            //     foregroundColor: Colors.white,
+            //   ),
+            // ),
+            // const SizedBox(height: 16),
 
             // Events List
-            Expanded(
+            ConstrainedBox(
+              constraints:
+                  BoxConstraints(minHeight: 200, maxHeight: MediaQuery.of(context).size.height * 0.5),
               child: Card(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
@@ -444,10 +877,13 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
                     Expanded(
                       child: events.isEmpty
                           ? const Center(
-                              child: Text(
-                                'No events yet. Start monitoring to see geofence events.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.grey),
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text(
+                                  'No events yet. Start monitoring to see geofence events.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.grey),
+                                ),
                               ),
                             )
                           : ListView.builder(
