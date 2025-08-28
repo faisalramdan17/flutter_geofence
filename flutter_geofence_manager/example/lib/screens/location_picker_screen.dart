@@ -17,7 +17,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         title: const Text('Flutter Location Picker'),
       ),
       body: PlacePicker(
-        apiKey: 'AIzaSyAh3-PvHtLVjZO9grVzzzrB65dJWbpcWhs',
+        apiKey: String.fromEnvironment('gmap_api_key'),
         useFreeGeocoding: true,
         usePinPointingSearch: true,
         onPlacePicked: (LocationResult result) {
