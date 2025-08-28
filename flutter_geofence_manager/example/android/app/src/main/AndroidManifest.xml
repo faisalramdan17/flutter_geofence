@@ -13,7 +13,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     
     <application
-        android:label="example"
+        android:label="Flutter GeoFencing Example"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         tools:replace="android:label">

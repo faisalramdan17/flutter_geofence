@@ -6,7 +6,6 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <application
-        android:icon="@mipmap/ic_launcher"
         android:label="geo_fencing_android">
 
         <receiver

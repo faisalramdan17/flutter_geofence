@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_geofence_manager/flutter_geofence_manager.dart';
@@ -9,14 +10,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize local notifications
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   const AndroidInitializationSettings initializationSettingsAndroid =
       AndroidInitializationSettings('@mipmap/ic_launcher');
 
-  const DarwinInitializationSettings initializationSettingsIOS =
-      DarwinInitializationSettings();
+  const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings();
   ;
 
   const InitializationSettings initializationSettings = InitializationSettings(
@@ -40,8 +39,7 @@ void main() async {
 class GeoFencingExampleApp extends StatelessWidget {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
 
-  const GeoFencingExampleApp(
-      {super.key, required this.flutterLocalNotificationsPlugin});
+  const GeoFencingExampleApp({super.key, required this.flutterLocalNotificationsPlugin});
 
   @override
   Widget build(BuildContext context) {
@@ -51,8 +49,7 @@ class GeoFencingExampleApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: GeoFencingHomePage(
-          flutterLocalNotificationsPlugin: flutterLocalNotificationsPlugin),
+      home: GeoFencingHomePage(flutterLocalNotificationsPlugin: flutterLocalNotificationsPlugin),
     );
   }
 }
@@ -60,8 +57,7 @@ class GeoFencingExampleApp extends StatelessWidget {
 class GeoFencingHomePage extends StatefulWidget {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
 
-  const GeoFencingHomePage(
-      {super.key, required this.flutterLocalNotificationsPlugin});
+  const GeoFencingHomePage({super.key, required this.flutterLocalNotificationsPlugin});
 
   @override
   State<GeoFencingHomePage> createState() => _GeoFencingHomePageState();
@@ -103,8 +99,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
       } else if (Platform.isIOS) {
         // For iOS, request notification permission
         // iOS permissions are handled automatically by the system
-        debugPrint(
-            'iOS notification permissions will be requested by the system');
+        debugPrint('iOS notification permissions will be requested by the system');
       }
       setState(() {
         _isInitialized = true;
@@ -122,23 +117,19 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
       if (Platform.isAndroid) {
         // For Android 13+, request notification permission
         if (await widget.flutterLocalNotificationsPlugin
-                .resolvePlatformSpecificImplementation<
-                    AndroidFlutterLocalNotificationsPlugin>() !=
+                .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>() !=
             null) {
-          final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
-              widget.flutterLocalNotificationsPlugin
-                  .resolvePlatformSpecificImplementation<
-                      AndroidFlutterLocalNotificationsPlugin>();
+          final AndroidFlutterLocalNotificationsPlugin? androidImplementation = widget
+              .flutterLocalNotificationsPlugin
+              .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
-          final bool? granted =
-              await androidImplementation?.requestNotificationsPermission();
+          final bool? granted = await androidImplementation?.requestNotificationsPermission();
           debugPrint('Android notification permission granted: $granted');
         }
       } else if (Platform.isIOS) {
         // For iOS, request notification permission
         // iOS permissions are handled automatically by the system
-        debugPrint(
-            'iOS notification permissions will be requested by the system');
+        debugPrint('iOS notification permissions will be requested by the system');
       }
     } catch (e) {
       debugPrint('Error requesting notification permissions: $e');
@@ -210,8 +201,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
         setState(() {
           events.add(event);
         });
-        debugPrint(
-            "UI: Received event ${event.id}-----${event.transitionType}");
+        log("UI: Received event ${event.id}-----${event.transitionType}");
 
         // Show notification for the geofence event
         _showGeofenceNotification(event);
@@ -230,15 +220,15 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
       final regions = [
         GeoFenceRegion(
           id: 'home',
-          latitude: 37.7749, // San Francisco coordinates as example
-          longitude: -122.4194,
+          latitude: -6.174879, // Asya Daily
+          longitude: 106.7090942,
           radius: 100.0, // 100 meters
         ),
         GeoFenceRegion(
-          id: 'testing',
-          latitude: 28.67388, // San Francisco coordinates as example
-          longitude: 77.376271,
-          radius: 50.0, // 100 meters
+          id: 'swiming_pool',
+          latitude: -6.175065, // San Francisco coordinates as example
+          longitude: 106.710677,
+          radius: 100.0, // 100 meters
         ),
         GeoFenceRegion(
           id: 'office',
@@ -281,8 +271,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
   }
 
   Future<void> _showGeofenceNotification(GeoFenceEvent event) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
+    const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
       'geofence_channel',
       'Geofence Events',
       channelDescription: 'Notifications for geofence enter/exit events',
@@ -293,8 +282,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
       playSound: true,
     );
 
-    const DarwinNotificationDetails iOSPlatformChannelSpecifics =
-        DarwinNotificationDetails(
+    const DarwinNotificationDetails iOSPlatformChannelSpecifics = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
@@ -305,8 +293,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
       iOS: iOSPlatformChannelSpecifics,
     );
 
-    final String title =
-        '${event.transitionType.name.toUpperCase()} - ${event.id}';
+    final String title = '${event.transitionType.name.toUpperCase()} - ${event.id}';
     final String body = 'Lat: ${event.latitude.toStringAsFixed(4)}, '
         'Lng: ${event.longitude.toStringAsFixed(4)}\n'
         'Time: ${event.timestamp.toLocal()}';
@@ -319,13 +306,11 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
       payload: 'geofence_${event.id}_${event.transitionType.name}',
     );
 
-    debugPrint(
-        'Notification shown for geofence event: ${event.id} - ${event.transitionType.name}');
+    debugPrint('Notification shown for geofence event: ${event.id} - ${event.transitionType.name}');
   }
 
   Future<void> _showTestNotification() async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
+    const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
       'test_channel',
       'Test Notifications',
       channelDescription: 'Test notifications for debugging',
@@ -346,7 +331,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
     );
 
     await widget.flutterLocalNotificationsPlugin.show(
-      999, // Test notification ID
+      1, // Test notification ID
       'Test Notification',
       'This is a test notification to verify the notification system is working!',
       platformChannelSpecifics,
@@ -394,9 +379,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
                     Row(
                       children: [
                         Icon(
-                          _isMonitoring
-                              ? Icons.location_on
-                              : Icons.location_off,
+                          _isMonitoring ? Icons.location_on : Icons.location_off,
                           color: _isMonitoring ? Colors.blue : Colors.grey,
                         ),
                         const SizedBox(width: 8),
@@ -414,9 +397,7 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isInitialized && !_isMonitoring
-                        ? _startMonitoring
-                        : null,
+                    onPressed: _isInitialized && !_isMonitoring ? _startMonitoring : null,
                     child: const Text('Start Monitoring'),
                   ),
                 ),
@@ -475,16 +456,12 @@ class _GeoFencingHomePageState extends State<GeoFencingHomePage> {
                                 final event = events[index];
                                 return ListTile(
                                   leading: Icon(
-                                    event.transitionType == TransitionType.enter
-                                        ? Icons.login
-                                        : Icons.logout,
-                                    color: event.transitionType ==
-                                            TransitionType.enter
+                                    event.transitionType == TransitionType.enter ? Icons.login : Icons.logout,
+                                    color: event.transitionType == TransitionType.enter
                                         ? Colors.green
                                         : Colors.orange,
                                   ),
-                                  title: Text(
-                                      '${event.transitionType.name.toUpperCase()} - ${event.id}'),
+                                  title: Text('${event.transitionType.name.toUpperCase()} - ${event.id}'),
                                   subtitle: Text(
                                     'Lat: ${event.latitude.toStringAsFixed(4)}, '
                                     'Lng: ${event.longitude.toStringAsFixed(4)}\n'
